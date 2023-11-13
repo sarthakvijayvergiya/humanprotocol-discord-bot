@@ -1,10 +1,8 @@
-""""
-Copyright © Krypton 2019-2023 - https://github.com/kkrypt0nn (https://krypton.ninja)
-Description:
-🐍 A simple template to start to code your own and personalized discord bot in Python programming language.
-
-Version: 6.1.0
 """
+Author Sarthak Vijayvergiya - https://github.com/sarthakvijayvergiya
+Description: A Discord bot that helps in launching jobs, setting API keys, and configuring result channels for the Human Protocol.
+"""
+
 
 
 import aiosqlite
@@ -14,84 +12,45 @@ class DatabaseManager:
     def __init__(self, *, connection: aiosqlite.Connection) -> None:
         self.connection = connection
 
-    async def add_warn(
-        self, user_id: int, server_id: int, moderator_id: int, reason: str
-    ) -> int:
+    async def add_api_key(self, user_id: int, api_key_id: str, api_key_secret: str) -> None:
         """
-        This function will add a warn to the database.
+        This function will add or update the API key and secret for a user in the database.
 
-        :param user_id: The ID of the user that should be warned.
-        :param reason: The reason why the user should be warned.
-        """
-        rows = await self.connection.execute(
-            "SELECT id FROM warns WHERE user_id=? AND server_id=? ORDER BY id DESC LIMIT 1",
-            (
-                user_id,
-                server_id,
-            ),
-        )
-        async with rows as cursor:
-            result = await cursor.fetchone()
-            warn_id = result[0] + 1 if result is not None else 1
-            await self.connection.execute(
-                "INSERT INTO warns(id, user_id, server_id, moderator_id, reason) VALUES (?, ?, ?, ?, ?)",
-                (
-                    warn_id,
-                    user_id,
-                    server_id,
-                    moderator_id,
-                    reason,
-                ),
-            )
-            await self.connection.commit()
-            return warn_id
-
-    async def remove_warn(self, warn_id: int, user_id: int, server_id: int) -> int:
-        """
-        This function will remove a warn from the database.
-
-        :param warn_id: The ID of the warn.
-        :param user_id: The ID of the user that was warned.
-        :param server_id: The ID of the server where the user has been warned
+        :param user_id: The ID of the user.
+        :param api_key_id: The API key ID to store.
+        :param api_key_secret: The API key secret to store.
         """
         await self.connection.execute(
-            "DELETE FROM warns WHERE id=? AND user_id=? AND server_id=?",
-            (
-                warn_id,
-                user_id,
-                server_id,
-            ),
+            "INSERT INTO user_settings(user_id, api_key_id, api_key_secret) VALUES (?, ?, ?) "
+            "ON CONFLICT(user_id) DO UPDATE SET api_key_id = excluded.api_key_id, api_key_secret = excluded.api_key_secret",
+            (user_id, api_key_id, api_key_secret),
         )
         await self.connection.commit()
-        rows = await self.connection.execute(
-            "SELECT COUNT(*) FROM warns WHERE user_id=? AND server_id=?",
-            (
-                user_id,
-                server_id,
-            ),
-        )
-        async with rows as cursor:
-            result = await cursor.fetchone()
-            return result[0] if result is not None else 0
+    
 
-    async def get_warnings(self, user_id: int, server_id: int) -> list:
+    async def add_result_channel(self, user_id: int, channel_id: int) -> None:
         """
-        This function will get all the warnings of a user.
+        This function will add or update the result channel for a user in the database.
 
-        :param user_id: The ID of the user that should be checked.
-        :param server_id: The ID of the server that should be checked.
-        :return: A list of all the warnings of the user.
+        :param user_id: The ID of the user.
+        :param channel_id: The channel ID where results should be published.
         """
-        rows = await self.connection.execute(
-            "SELECT user_id, server_id, moderator_id, reason, strftime('%s', created_at), id FROM warns WHERE user_id=? AND server_id=?",
-            (
-                user_id,
-                server_id,
-            ),
+        await self.connection.execute(
+            "INSERT INTO user_settings(user_id, result_channel_id) VALUES (?, ?) "
+            "ON CONFLICT(user_id) DO UPDATE SET result_channel_id = excluded.result_channel_id",
+            (user_id, channel_id),
         )
-        async with rows as cursor:
-            result = await cursor.fetchall()
-            result_list = []
-            for row in result:
-                result_list.append(row)
-            return result_list
+        await self.connection.commit()
+
+    async def get_user_settings(self, user_id: int):
+        """
+        This function retrieves the API key and result channel ID for a user.
+
+        :param user_id: The ID of the user.
+        :return: A tuple containing the API key and result channel ID.
+        """
+        async with self.connection.execute(
+            "SELECT api_key, result_channel_id FROM user_settings WHERE user_id = ?",
+            (user_id,)
+        ) as cursor:
+            return await cursor.fetchone()

@@ -1,9 +1,6 @@
 """
-Copyright © Krypton 2019-2023 - https://github.com/kkrypt0nn (https://krypton.ninja)
-Description:
-🐍 A simple template to start to code your own and personalized discord bot in Python programming language.
-
-Version: 6.1.0
+Author Sarthak Vijayvergiya - https://github.com/sarthakvijayvergiya
+Description: A Discord bot that helps in launching jobs, setting API keys, and configuring result channels for the Human Protocol.
 """
 
 import json
@@ -62,6 +59,7 @@ intents.presences = True
 
 intents = discord.Intents.default()
 intents.members = True
+intents.message_content = True
 """
 Uncomment this if you want to use prefix (normal) commands.
 It is recommended to use slash commands and therefore not use prefix commands.
@@ -105,7 +103,7 @@ class LoggingFormatter(logging.Formatter):
 
 
 logger = logging.getLogger("discord_bot")
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 # Console handler
 console_handler = logging.StreamHandler()
@@ -140,8 +138,6 @@ class DiscordBot(commands.Bot):
         self.logger = logger
         self.config = config
         self.database = None
-        # New API keys dictionary to store user's API keys
-        self.api_keys = {}
 
     async def init_db(self) -> None:
         async with aiosqlite.connect(
@@ -174,7 +170,7 @@ class DiscordBot(commands.Bot):
         """
         Setup the game status task of the bot.
         """
-        statuses = ["with you!", "with Krypton!", "with humans!"]
+        statuses = ["with you!", "with Sarthak!", "with humans!"]
         await self.change_presence(activity=discord.Game(random.choice(statuses)))
 
     @status_task.before_loop
@@ -289,50 +285,30 @@ class DiscordBot(commands.Bot):
             raise error
 
     async def on_member_join(self, member: discord.Member) -> None:
-        """Send a welcome message when a user joins and prompt them to set their API key."""
-        welcome_channel_id = self.config.get("welcome_channel_id")
-        if welcome_channel_id:
-            channel = self.get_channel(welcome_channel_id)
-            if channel:
-                await channel.send(f"Welcome {member.mention} to the HUMAN Protocol Job Launcher server! Please check your direct messages for further instructions.")
-
-        # Send direct message to the user
-        try:
-            await member.create_dm()
-            await member.dm_channel.send(
-                "Hello! Before you can launch jobs, you need to set up your API key. "
-                "Please use the command `!setAPIKey <API_KEY>` in this chat. Your conversation here is private and secure."
+        """Sends a welcome message and instructions for setting up the API key and result channel."""
+        welcome_channel = self.get_channel(self.config["welcome_channel_id"])
+        if welcome_channel:
+            await welcome_channel.send(
+                f"Welcome {member.mention} to the server! Please check your direct messages for further instructions."
             )
+
+        dm_message = (
+            "Hello! Before you can launch jobs, you need to set up your API key, result channel, and launch jobs. "
+            "Please use the following commands in this chat:\n"
+            "`!setAPIKey` to set your API key ID and secret. For example, use `!setAPIKey your_api_key_id your_api_key_secret`.\n"
+            "`!setResultChannel <CHANNEL_ID>` to set your result publishing channel. For example, `!setResultChannel 123456789`.\n"
+            "`!launchJob` to launch a new job and provide the required information.\n"
+            "Your conversation here is private and secure."
+        )
+
+        try:
+            await member.send(dm_message)
         except discord.Forbidden:
-            self.logger.warning(f"Could not send DM to {member.name}")
-
-    @commands.command(name="setAPIKey")
-    async def set_api_key(self, ctx: commands.Context, api_key: str) -> None:
-        """Set the user's API key."""
-        if not isinstance(ctx.channel, discord.DMChannel):
-            await ctx.send("This command can only be used in direct messages.")
-            return
-
-        self.api_keys[ctx.author.id] = api_key
-        await ctx.send(f"Thank you, {ctx.author.mention}! Your API key has been securely stored. You can now launch jobs using the `!launchJob <job_parameters>` command in this chat.")
-
-    @commands.command(name="launchJob")
-    async def launch_job(self, ctx: commands.Context, *args) -> None:
-        """Launch a job with the given parameters."""
-        if not isinstance(ctx.channel, discord.DMChannel):
-            await ctx.send("This command can only be used in direct messages.")
-            return
-
-        if ctx.author.id not in self.api_keys:
-            await ctx.send("You need to set your API key first using the `!setAPIKey <API_KEY>` command.")
-            return
-
-        api_key = self.api_keys[ctx.author.id]
-        await ctx.send("Job initiated! Please wait while we process your request.")
-        # Here you would use the API key to launch the job and get the job ID
-        job_id = "12345"  # Example job ID
-        await ctx.send(f"Your job with ID #{job_id} has been successfully launched!")
-
+            # If DMs are closed, we can send a message in the welcome channel or log it
+            if welcome_channel:
+                await welcome_channel.send(
+                    f"{member.mention}, please enable your DMs to receive important information about setting up your API key and result channel."
+                )
 load_dotenv()
 
 bot = DiscordBot()
