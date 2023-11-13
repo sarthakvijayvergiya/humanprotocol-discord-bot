@@ -25,7 +25,7 @@ Repo Structure Inspired by [kkrypt0nn's GitHub](https://github.com/kkrypt0nn).
 ## Issues or Questions
 
 If you encounter any issues or have questions about the bot's functionality, feel free to:
-- Post your inquiries on the [GitHub Issues](https://github.com/yourusername/your-bot-repo/issues) page.
+- Post your inquiries on the [GitHub Issues](https://github.com/sarthakvijayvergiya/humanprotocol-discord-bot/issues) page.
 
 We're here to help and provide assistance!
 
