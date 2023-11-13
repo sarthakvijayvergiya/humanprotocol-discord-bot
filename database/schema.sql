@@ -1,8 +1,7 @@
-CREATE TABLE IF NOT EXISTS `warns` (
-  `id` int(11) NOT NULL,
-  `user_id` varchar(20) NOT NULL,
-  `server_id` varchar(20) NOT NULL,
-  `moderator_id` varchar(20) NOT NULL,
-  `reason` varchar(255) NOT NULL,
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE IF NOT EXISTS `user_settings` (
+  `user_id` VARCHAR(20) NOT NULL,
+  `api_key_id` VARCHAR(255),
+  `api_key_secret` VARCHAR(255),
+  `result_channel_id` VARCHAR(20),
+  PRIMARY KEY (`user_id`)
 );
