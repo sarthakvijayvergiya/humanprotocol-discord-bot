@@ -1,0 +1,5 @@
+{
+    "prefix": "YOUR_BOT_PREFIX_HERE",
+    "invite_link": "YOUR_BOT_INVITE_LINK_HERE",
+    "welcome_channel_id": "WELCOME_MESSAGE_CHANNEL_ID"
+}

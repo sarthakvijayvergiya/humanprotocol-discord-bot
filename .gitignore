@@ -147,4 +147,3 @@ cython_debug/
 discord.log
 
 .python-version
-config.json
