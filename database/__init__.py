@@ -50,7 +50,7 @@ class DatabaseManager:
         :return: A tuple containing the API key and result channel ID.
         """
         async with self.connection.execute(
-            "SELECT api_key, result_channel_id FROM user_settings WHERE user_id = ?",
+            "SELECT api_key_id, api_key_secret, result_channel_id FROM user_settings WHERE user_id = ?",
             (user_id,)
         ) as cursor:
             return await cursor.fetchone()

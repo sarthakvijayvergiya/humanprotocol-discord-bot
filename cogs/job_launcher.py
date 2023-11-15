@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 
 from services.external_api_handler import ExternalAPIHandler
 
-class Template(commands.Cog, name="template"):
+class JobLauncher(commands.Cog, name="JobLauncher"):
     def __init__(self, bot) -> None:
         self.bot = bot
         self.job_queue = [] # A list to keep track of jobs to publish results for
@@ -39,20 +39,15 @@ class Template(commands.Cog, name="template"):
 
     @commands.command(name="setAPIKey")
     async def set_api_key_command(self, context: Context):
-        await context.send("Please provide your API key ID:")
         
-        api_key_id = await self.ask(context)
+        api_key_id = await self.ask(context, "Please provide your API key ID")
         if api_key_id is None:
             return
         
-        await context.send("Please provide your API key secret:")
-        
-        api_key_secret = await self.ask(context)
+        api_key_secret = await self.ask(context, "Please provide your API key secret")
         if api_key_secret is None:
             return
         
-        # Store the API key ID and secret as needed, e.g., in a database
-        # Replace the following lines with the actual storage logic
         await self.bot.database.add_api_key(context.author.id, api_key_id, api_key_secret)
         
         await context.send("API key and secret set successfully.")
@@ -128,6 +123,7 @@ class Template(commands.Cog, name="template"):
                 'result_channel_id': result_channel_id,
                 'publish_time': datetime.utcnow() + timedelta(minutes=1),  # Set to 1 minutes later
                 'result': {  # This would be the actual result you get from your job
+                    "jobId": job_response,
                     "exchangeAddress": "0x123",
                     "workerAddress": "0x456",
                     "solution": "Dummy solution."
@@ -137,18 +133,6 @@ class Template(commands.Cog, name="template"):
             # Simulate a delay for job processing
             await asyncio.sleep(5)  # This is just for demonstration purposes
 
-            # # Send the result to the set result channel
-            # result_channel = self.bot.get_channel(self.bot.config["welcome_channel_id"])
-            # if result_channel:
-            #     # Simulate a dummy result
-            #     dummy_result = {
-            #         "exchangeAddress": "0x123",
-            #         "workerAddress": "0x456",
-            #         "solution": "Dummy solution."
-            #     }
-            #     await result_channel.send(f"Job ID: XYZ Result: {dummy_result}")
-            # else:
-            #     await context.send(f"Could not find the result channel with ID {result_channel_id}. Please set a valid channel.")
         else:
             await context.send("Job launch cancelled.")
 
@@ -166,6 +150,6 @@ class Template(commands.Cog, name="template"):
         return message.content
     
 async def setup(bot):
-    template_cog = Template(bot)
-    await bot.add_cog(template_cog)  # Use 'await' to properly await the coroutine
-    template_cog.publish_results.start()  # Start the background task when the cog is loaded
+    job_launcher_cog = JobLauncher(bot)
+    await bot.add_cog(job_launcher_cog)  # Use 'await' to properly await the coroutine
+    job_launcher_cog.publish_results.start()  # Start the background task when the cog is loaded
