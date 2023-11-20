@@ -6,12 +6,11 @@ class ExternalAPIHandler:
         self.session = aiohttp.ClientSession()
         self.base_url = os.getenv('API_BASE_URL')  # Read API URL from an environment variable
 
-    async def launch_job(self, api_key_id, api_key_secret, requesterTitle, submissionsRequired, requesterDescription, fundAmount):
+    async def launch_job(self, api_key, requesterTitle, submissionsRequired, requesterDescription, fundAmount):
         url = f'{self.base_url}/job/fortune'
         
         headers = {
-            'x-api-key': api_key_secret,  # Use the API key secret as the header value
-            'x-api-key-id': api_key_id,
+            'x-api-key': api_key,  # Use the API key secret as the header value
             'Content-Type': 'application/json'
         }
         

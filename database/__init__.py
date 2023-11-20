@@ -12,18 +12,17 @@ class DatabaseManager:
     def __init__(self, *, connection: aiosqlite.Connection) -> None:
         self.connection = connection
 
-    async def add_api_key(self, user_id: int, api_key_id: str, api_key_secret: str) -> None:
+    async def add_api_key(self, user_id: int, api_key: str) -> None:
         """
         This function will add or update the API key and secret for a user in the database.
 
         :param user_id: The ID of the user.
-        :param api_key_id: The API key ID to store.
-        :param api_key_secret: The API key secret to store.
+        :param api_key: The API key secret to store.
         """
         await self.connection.execute(
-            "INSERT INTO user_settings(user_id, api_key_id, api_key_secret) VALUES (?, ?, ?) "
-            "ON CONFLICT(user_id) DO UPDATE SET api_key_id = excluded.api_key_id, api_key_secret = excluded.api_key_secret",
-            (user_id, api_key_id, api_key_secret),
+            "INSERT INTO user_settings(user_id, api_key) VALUES (?, ?, ?) "
+            "ON CONFLICT(user_id) DO UPDATE SET api_key = excluded.api_key",
+            (user_id, api_key),
         )
         await self.connection.commit()
     
@@ -50,7 +49,7 @@ class DatabaseManager:
         :return: A tuple containing the API key and result channel ID.
         """
         async with self.connection.execute(
-            "SELECT api_key_id, api_key_secret, result_channel_id FROM user_settings WHERE user_id = ?",
+            "SELECT api_key, result_channel_id FROM user_settings WHERE user_id = ?",
             (user_id,)
         ) as cursor:
             return await cursor.fetchone()

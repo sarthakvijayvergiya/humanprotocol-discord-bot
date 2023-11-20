@@ -40,15 +40,11 @@ class JobLauncher(commands.Cog, name="JobLauncher"):
     @commands.command(name="setAPIKey")
     async def set_api_key_command(self, context: Context):
         
-        api_key_id = await self.ask(context, "Please provide your API key ID")
-        if api_key_id is None:
+        api_key = await self.ask(context, "Please provide your API key secret")
+        if api_key is None:
             return
         
-        api_key_secret = await self.ask(context, "Please provide your API key secret")
-        if api_key_secret is None:
-            return
-        
-        await self.bot.database.add_api_key(context.author.id, api_key_id, api_key_secret)
+        await self.bot.database.add_api_key(context.author.id, api_key)
         
         await context.send("API key and secret set successfully.")
 
@@ -74,9 +70,8 @@ class JobLauncher(commands.Cog, name="JobLauncher"):
             )
             return
 
-        api_key_id = settings[0]
-        api_key_secret = settings[1]
-        result_channel_id = settings[2]
+        api_key = settings[0]
+        result_channel_id = settings[1]
         
         await context.send("Let's launch a new job. I will need some information from you.")
 
@@ -111,7 +106,7 @@ class JobLauncher(commands.Cog, name="JobLauncher"):
             # Here, you would include the code to actually launch the job with the given parameters
             # Simulate launching the job
 
-            job_response = await self.external_api_handler.launch_job(api_key_id, api_key_secret, requesterTitle, submissionsRequired, requesterDescription, fundAmount)
+            job_response = await self.external_api_handler.launch_job(api_key, requesterTitle, submissionsRequired, requesterDescription, fundAmount)
             if job_response:
                 # If the job was launched successfully, do something with the response
                 await context.send(f"Job launched successfully: {job_response}")
