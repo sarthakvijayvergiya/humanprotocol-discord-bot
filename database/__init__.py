@@ -20,7 +20,7 @@ class DatabaseManager:
         :param api_key: The API key secret to store.
         """
         await self.connection.execute(
-            "INSERT INTO user_settings(user_id, api_key) VALUES (?, ?, ?) "
+            "INSERT INTO user_settings(user_id, api_key) VALUES (?, ?) "
             "ON CONFLICT(user_id) DO UPDATE SET api_key = excluded.api_key",
             (user_id, api_key),
         )
