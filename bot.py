@@ -295,7 +295,7 @@ class DiscordBot(commands.Bot):
         dm_message = (
             "Hello! Before you can launch jobs, you need to set up your API key, result channel, and launch jobs. "
             "Please use the following commands in this chat:\n"
-            "`!setAPIKey` to set your API key ID and secret. For example, use `!setAPIKey your_api_key`.\n"
+            "`!setAPIKey` to set your API key. For example, use `!setAPIKey`.\n"
             "`!setResultChannel <CHANNEL_ID>` to set your result publishing channel. For example, `!setResultChannel 123456789`.\n"
             "`!launchJob` to launch a new job and provide the required information.\n"
             "Your conversation here is private and secure."
