@@ -20,6 +20,7 @@ class ExternalAPIHandler:
         submissionsRequired,
         requesterDescription,
         fundAmount,
+        network_chain_id
     ):
         url = f"{self.base_url}/job/fortune"
 
@@ -33,6 +34,7 @@ class ExternalAPIHandler:
             "submissionsRequired": int(submissionsRequired),
             "requesterDescription": requesterDescription,
             "fundAmount": int(fundAmount),
+            "chainId": int(network_chain_id)
         }
 
         try:
