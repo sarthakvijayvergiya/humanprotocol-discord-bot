@@ -9,7 +9,7 @@ import asyncio
 from discord.ext import tasks
 from datetime import datetime, timedelta
 import os
-
+import json
 from services.external_api_handler import ExternalAPIHandler
 
 class JobLauncher(commands.Cog, name="JobLauncher"):
@@ -107,7 +107,8 @@ class JobLauncher(commands.Cog, name="JobLauncher"):
             return
 
         # Step to select the network
-        supported_networks = os.getenv['SUPPORTED_NETWORKS']
+        supported_networks_str = os.getenv('SUPPORTED_NETWORKS')
+        supported_networks = json.loads(supported_networks_str.replace("'", '"'))
         network_choice = await self.ask(context, f"Select a network: {', '.join(supported_networks.keys())}")
         if network_choice is None or network_choice not in supported_networks:
             await context.send("Invalid network selection. Job launch cancelled.")
