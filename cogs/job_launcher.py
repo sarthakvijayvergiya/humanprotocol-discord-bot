@@ -106,6 +106,14 @@ class JobLauncher(commands.Cog, name="JobLauncher"):
         if fundAmount is None:
             return
 
+        # Step to select the network
+        supported_networks = os.getenv['SUPPORTED_NETWORKS']
+        network_choice = await self.ask(context, f"Select a network: {', '.join(supported_networks.keys())}")
+        if network_choice is None or network_choice not in supported_networks:
+            await context.send("Invalid network selection. Job launch cancelled.")
+            return
+        network_chain_id = supported_networks[network_choice]
+
         # Confirm the details with the user before proceeding
         await context.send(
             f"Please confirm the details:\n"
@@ -113,6 +121,7 @@ class JobLauncher(commands.Cog, name="JobLauncher"):
             f"Submissions Required: {submissionsRequired}\n"
             f"Description: {requesterDescription}\n"
             f"Fund Amount: {fundAmount}\n"
+            f"Netowrk: {network_choice}\n"
             # f"Type 'yes' to confirm and launch the job."
         )
 
@@ -127,6 +136,7 @@ class JobLauncher(commands.Cog, name="JobLauncher"):
                 submissionsRequired,
                 requesterDescription,
                 fundAmount,
+                network_chain_id
             )
             if job_response:
                 # If the job was launched successfully, do something with the response
