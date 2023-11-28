@@ -74,7 +74,7 @@ class General(commands.Cog, name="general"):
         for i in self.bot.cogs:
             if i == "owner" and not (await self.bot.is_owner(context.author)):
                 continue
-            cog = self.bot.get_cog(i.lower())
+            cog = self.bot.get_cog(i)
             commands = cog.get_commands()
             data = []
             for command in commands:
