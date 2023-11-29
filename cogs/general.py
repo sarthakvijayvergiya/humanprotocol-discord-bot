@@ -101,7 +101,7 @@ class General(commands.Cog, name="general"):
             color=0xBEBEFE,
         )
         embed.set_author(name="Bot Information")
-        embed.add_field(name="Owner:", value="sarthakvijayvergiya", inline=True)
+        embed.add_field(name="Owner:", value="Human Protocol", inline=True)
         embed.add_field(
             name="Python Version:", value=f"{platform.python_version()}", inline=True
         )
