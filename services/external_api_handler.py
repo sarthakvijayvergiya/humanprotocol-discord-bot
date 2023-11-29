@@ -5,6 +5,7 @@ Description: A Discord bot that helps in launching jobs, setting API keys, and c
 
 import aiohttp
 import os
+import json
 
 class ExternalAPIHandler:
     def __init__(self):
@@ -36,7 +37,6 @@ class ExternalAPIHandler:
             "fundAmount": int(fundAmount),
             "chainId": int(network_chain_id)
         }
-
         try:
             async with self.session.post(
                 url, json=payload, headers=headers
@@ -88,7 +88,16 @@ class ExternalAPIHandler:
                             f"Expected JSON, but got a different content type: {response.headers.get('Content-Type')}"
                         )
                         print(f"Response text: {response_text}")
-                        return None
+                        try:
+                            data = json.loads(response_text)
+                            return data
+                        except json.JSONDecodeError:
+                        # If parsing fails, handle it as a non-JSON response
+                            print(
+                                f"Expected JSON, but got a different content type: {response.headers.get('Content-Type')}"
+                            )
+                            print(f"Response text: {response_text}")
+                            return None
                 else:
                     response_text = await response.text()
                     print(

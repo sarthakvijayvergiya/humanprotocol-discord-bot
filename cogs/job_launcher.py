@@ -12,6 +12,7 @@ import os
 import json
 from services.external_api_handler import ExternalAPIHandler
 
+
 class JobLauncher(commands.Cog, name="JobLauncher"):
     def __init__(self, bot) -> None:
         self.bot = bot
@@ -21,24 +22,31 @@ class JobLauncher(commands.Cog, name="JobLauncher"):
             os.getenv("RESULT_CHECK_INTERVAL", 180)
         )  # Default to 180 seconds
 
+
     def cog_unload(self):
         self.publish_results.cancel()  # Cancel the background task when the cog is unloaded
         self.external_api_handler.close_session()
 
-    @tasks.loop(seconds=60)  # Temporary interval, will be reset in before_publish_results
+    @tasks.loop(
+        seconds=60
+    )  # Temporary interval, will be reset in before_publish_results
     async def publish_results(self):
         for job in self.job_queue:
-            results = await self.external_api_handler.check_job_result(job["api_key"], job["job_id"])
+            results = await self.external_api_handler.check_job_result(
+                job["api_key"], job["job_id"]
+            )
             if results:
                 # Assuming that the job is considered complete if any results are returned
                 result_channel = self.bot.get_channel(job["result_channel_id"])
                 if result_channel:
                     for result in results:
                         message = f"Job ID: {job['job_id']}, Worker Address: {result['workerAddress']}, Solution: {result['solution']}"
-                        if result['error']:
+                        if 'error' in result and result['error']:
                             message += f", Error: {result['error']}"
                         await result_channel.send(message)
-                    self.job_queue.remove(job)  # Remove job from queue after publishing results
+                    self.job_queue.remove(
+                        job
+                    )  # Remove job from queue after publishing results
 
     @publish_results.before_loop
     async def before_publish_results(self):
@@ -107,9 +115,11 @@ class JobLauncher(commands.Cog, name="JobLauncher"):
             return
 
         # Step to select the network
-        supported_networks_str = os.getenv('SUPPORTED_NETWORKS')
+        supported_networks_str = os.getenv("SUPPORTED_NETWORKS")
         supported_networks = json.loads(supported_networks_str.replace("'", '"'))
-        network_choice = await self.ask(context, f"Select a network: {', '.join(supported_networks.keys())}")
+        network_choice = await self.ask(
+            context, f"Select a network: {', '.join(supported_networks.keys())}"
+        )
         if network_choice is None or network_choice not in supported_networks:
             await context.send("Invalid network selection. Job launch cancelled.")
             return
@@ -137,7 +147,7 @@ class JobLauncher(commands.Cog, name="JobLauncher"):
                 submissionsRequired,
                 requesterDescription,
                 fundAmount,
-                network_chain_id
+                network_chain_id,
             )
             if job_response:
                 # If the job was launched successfully, do something with the response
