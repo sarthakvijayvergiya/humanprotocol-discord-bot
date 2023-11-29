@@ -41,7 +41,7 @@ Here is an explanation of what everything is:
 
 ### `.env` file
 
-To set up the token you will have to either make use of the [`.env.example`](.env.example) file, either copy or rename it to `.env` and replace `YOUR_BOT_TOKEN_HERE`, `API_BASE_URL` with your bot's token and human api server url.
+To set up the token you will have to either make use of the [`.env.example`](.env.example) file, either copy or rename it to `.env` and replace `YOUR_BOT_TOKEN_HERE`, `API_BASE_URL`, `SUPPORTED_NETWORKS`, `RESULT_CHECK_INTERVAL` with your bot's token, human api server url, support network and result interval in seconds.
 
 ## How to start
 
