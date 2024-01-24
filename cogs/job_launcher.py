@@ -17,15 +17,41 @@ class JobLauncher(commands.Cog, name="JobLauncher"):
     def __init__(self, bot) -> None:
         self.bot = bot
         self.job_queue = []  # A list to keep track of jobs to publish results for
+        self.track_escrow_queue = asyncio.Queue()  # New queue for escrow ID retrieval
         self.external_api_handler = ExternalAPIHandler()
         self.result_check_interval = int(
             os.getenv("RESULT_CHECK_INTERVAL", 180)
         )  # Default to 180 seconds
+        self.allowed_api_keys = os.getenv('USER_API_KEYS').split(',')
 
 
     def cog_unload(self):
         self.publish_results.cancel()  # Cancel the background task when the cog is unloaded
         self.external_api_handler.close_session()
+
+    @tasks.loop(seconds=60)  # Run this loop every minute
+    async def escrow_id_retrieval_worker(self):
+        current_time = datetime.datetime.utcnow()
+        jobs_to_remove = []  # List to keep track of jobs to remove from the queue
+
+        for job in self.job_queue:
+            time_since_launch = (current_time - job['launch_time']).total_seconds()
+            # Check if at least 12 minutes have passed since the job was launched
+            if time_since_launch >= 720 and time_since_launch % 720 < 60:
+                job_details = await self.external_api_handler.get_job_details(job["api_key"], job["job_id"])
+                if job_details and 'escrow_id' in job_details:
+                    job['escrow_id'] = job_details['escrow_id']
+                    await self.track_escrow_queue.put(job)  # Move to the tracking queue
+                    jobs_to_remove.append(job)  # Mark this job for removal from the queue
+
+        # Remove the processed jobs from the job_queue
+        for job in jobs_to_remove:
+            self.job_queue.remove(job)
+
+    @escrow_id_retrieval_worker.before_loop
+    async def before_escrow_id_retrieval_worker(self):
+        await self.bot.wait_until_ready()  # Ensure the bot is ready before starting the loop
+
 
     @tasks.loop(
         seconds=60
@@ -55,15 +81,49 @@ class JobLauncher(commands.Cog, name="JobLauncher"):
             seconds=self.result_check_interval
         )  # Set the actual interval
 
-    @commands.command(name="setAPIKey")
-    async def set_api_key_command(self, context: Context):
-        api_key = await self.ask(context, "Please provide your API key secret")
-        if api_key is None:
+    # @commands.command(name="setAPIKey")
+    # async def set_api_key_command(self, context: Context):
+    #     api_key = await self.ask(context, "Please provide your API key secret")
+    #     if api_key is None:
+    #         return
+
+    #     await self.bot.database.add_api_key(context.author.id, api_key)
+
+    #     await context.send("API key set successfully.")
+
+    @commands.command(name="listjobs")
+    async def list_jobs(self, ctx, api_key: str, status: str='PENDING', limit: int=10, skip: int=0):
+        # Check if the API key provided by the user is in the list of allowed keys
+        if api_key not in self.allowed_api_keys:
+            await ctx.author.send("You have provided an invalid API key.")
             return
-
-        await self.bot.database.add_api_key(context.author.id, api_key)
-
-        await context.send("API key set successfully.")
+        
+        # Parse the supported networks from the environment variable
+        supported_networks_str = os.getenv("SUPPORTED_NETWORKS", "{}")
+        supported_networks = json.loads(supported_networks_str)
+        
+        # Ask the user to select a network
+        network_choices = ", ".join(supported_networks.keys())
+        network_choice_message = await self.ask(ctx, f"Select a network: {network_choices}")
+        
+        # Validate the user's choice
+        if not network_choice_message or network_choice_message.content not in supported_networks:
+            await ctx.send("Invalid network selection. Job listing cancelled.")
+            return
+        
+        network_chain_id = supported_networks[network_choice_message.content]
+        networks = [network_chain_id]  # Convert the choice to a list as the API expects a list
+        
+        # Call the API handler to list pending jobs
+        try:
+            pending_jobs = await self.bot.external_api_handler.list_pending_jobs(api_key, networks, status, limit, skip)
+            if pending_jobs is not None:
+                # Send the list of pending jobs to the user via DM
+                await ctx.author.send(f"Pending Jobs: {json.dumps(pending_jobs, indent=2)}")
+            else:
+                await ctx.author.send("Failed to retrieve pending jobs.")
+        except Exception as e:
+            await ctx.author.send(f"An error occurred: {str(e)}")
 
     @commands.command(name="setResultChannel")
     async def set_result_channel_command(self, context: Context, channel_id: int):
@@ -74,26 +134,31 @@ class JobLauncher(commands.Cog, name="JobLauncher"):
     async def launch_job(self, context: Context):
         settings = await self.bot.database.get_user_settings(context.author.id)
 
-        # Check if both API key and result channel have been set
-        if not settings or not settings[0] or not settings[1]:
-            missing_settings = []
-            if not settings or not settings[0]:
-                missing_settings.append("API key")
-            if not settings or not settings[1]:
-                missing_settings.append("result channel")
+        # Check if the result channel has been set
+        if not settings or not settings[1]:
             await context.send(
-                f"You need to set the following before launching a job: {', '.join(missing_settings)}. "
-                f"Use the commands `!setAPIKey` and `!setResultChannel <CHANNEL_ID>`."
+                "You need to set a result channel before launching a job. "
+                "Use the command `!setResultChannel <CHANNEL_ID>`."
             )
             return
 
-        api_key = settings[0]
-        result_channel_id = settings[1]
+        result_channel_id = settings[0]
 
         await context.send(
             "Let's launch a new job. I will need some information from you."
         )
 
+        api_key = await self.ask(context, "Please enter your API key:")
+        if not api_key:
+            await context.send("API key not provided. Job launch cancelled.")
+            return
+        # Check if the provided API key is in the list of allowed API keys from the environment variable
+        allowed_api_keys_env = os.environ.get('USER_API_KEYS')
+        if allowed_api_keys_env:
+            allowed_api_keys = json.loads(allowed_api_keys_env)
+            if api_key not in allowed_api_keys:
+                await context.send("API key invalid. Access denied.")
+                return
         requesterTitle = await self.ask(context, "What is the title for the job?")
         if requesterTitle is None:
             return
@@ -152,7 +217,7 @@ class JobLauncher(commands.Cog, name="JobLauncher"):
             if job_response:
                 # If the job was launched successfully, do something with the response
 
-                self.job_queue.append(
+                self.jobs_ids_queue.append(
                     {
                         "result_channel_id": result_channel_id,
                         "job_id": job_response,  # Store the job ID
