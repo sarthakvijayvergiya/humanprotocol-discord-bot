@@ -3,11 +3,12 @@ Author Sarthak Vijayvergiya - https://github.com/sarthakvijayvergiya
 Description: A Discord bot that helps in launching jobs, setting API keys, and configuring result channels for the Human Protocol.
 """
 
+import discord
 from discord.ext import commands
 from discord.ext.commands import Context
 import asyncio
 from discord.ext import tasks
-from datetime import datetime, timedelta
+from datetime import datetime
 import os
 import json
 from services.external_api_handler import ExternalAPIHandler
@@ -22,7 +23,8 @@ class JobLauncher(commands.Cog, name="JobLauncher"):
         self.result_check_interval = int(
             os.getenv("RESULT_CHECK_INTERVAL", 180)
         )  # Default to 180 seconds
-        self.allowed_api_keys = os.getenv('USER_API_KEYS').split(',')
+        self.allowed_api_key = os.getenv('USER_API_KEY')
+        self.whitelisted_channel = os.getenv("WHITELISTED_CHANNEL")
 
 
     def cog_unload(self):
@@ -59,11 +61,11 @@ class JobLauncher(commands.Cog, name="JobLauncher"):
     async def publish_results(self):
         for job in self.job_queue:
             results = await self.external_api_handler.check_job_result(
-                job["api_key"], job["job_id"]
+                self.allowed_api_key, job["job_id"]
             )
             if results:
                 # Assuming that the job is considered complete if any results are returned
-                result_channel = self.bot.get_channel(job["result_channel_id"])
+                result_channel = self.whitelisted_channel
                 if result_channel:
                     for result in results:
                         message = f"Job ID: {job['job_id']}, Worker Address: {result['workerAddress']}, Solution: {result['solution']}"
@@ -81,21 +83,27 @@ class JobLauncher(commands.Cog, name="JobLauncher"):
             seconds=self.result_check_interval
         )  # Set the actual interval
 
-    # @commands.command(name="setAPIKey")
-    # async def set_api_key_command(self, context: Context):
-    #     api_key = await self.ask(context, "Please provide your API key secret")
-    #     if api_key is None:
-    #         return
+    async def check_whitelisted_channel(self, context: Context):
+        # Check if the command was used in a private or DM channel
+        if isinstance(context.channel, discord.DMChannel):
+            await context.send("This command is not allowed in private messages or DMs.")
+            return
 
-    #     await self.bot.database.add_api_key(context.author.id, api_key)
-
-    #     await context.send("API key set successfully.")
-
+        # Check if the channel is the whitelisted channel
+        whitelisted_channel = os.getenv("WHITELISTED_CHANNEL")
+        if (
+            context.channel.name != whitelisted_channel
+            and str(context.channel.id) != whitelisted_channel
+        ):
+            await context.send("This command is not allowed in this channel.")
+            return
+        return True
+    
     @commands.command(name="listjobs")
-    async def list_jobs(self, ctx, api_key: str, status: str='PENDING', limit: int=10, skip: int=0):
-        # Check if the API key provided by the user is in the list of allowed keys
-        if api_key not in self.allowed_api_keys:
-            await ctx.author.send("You have provided an invalid API key.")
+    @commands.check(commands.has_role("Viewer"))
+    async def list_jobs(self, ctx, status: str='PENDING', limit: int=10, skip: int=0):
+        # Check the whitelisted channel before executing the command
+        if not await self.check_whitelisted_channel(ctx):
             return
         
         # Parse the supported networks from the environment variable
@@ -125,40 +133,17 @@ class JobLauncher(commands.Cog, name="JobLauncher"):
         except Exception as e:
             await ctx.author.send(f"An error occurred: {str(e)}")
 
-    @commands.command(name="setResultChannel")
-    async def set_result_channel_command(self, context: Context, channel_id: int):
-        await self.bot.database.add_result_channel(context.author.id, channel_id)
-        await context.send("Result channel set successfully.")
-
     @commands.command(name="launchJob")
+    @commands.has_role("Launcher")
     async def launch_job(self, context: Context):
-        settings = await self.bot.database.get_user_settings(context.author.id)
-
-        # Check if the result channel has been set
-        if not settings or not settings[1]:
-            await context.send(
-                "You need to set a result channel before launching a job. "
-                "Use the command `!setResultChannel <CHANNEL_ID>`."
-            )
+         # Check the whitelisted channel before executing the command
+        if not await self.check_whitelisted_channel(context):
             return
-
-        result_channel_id = settings[0]
 
         await context.send(
             "Let's launch a new job. I will need some information from you."
         )
 
-        api_key = await self.ask(context, "Please enter your API key:")
-        if not api_key:
-            await context.send("API key not provided. Job launch cancelled.")
-            return
-        # Check if the provided API key is in the list of allowed API keys from the environment variable
-        allowed_api_keys_env = os.environ.get('USER_API_KEYS')
-        if allowed_api_keys_env:
-            allowed_api_keys = json.loads(allowed_api_keys_env)
-            if api_key not in allowed_api_keys:
-                await context.send("API key invalid. Access denied.")
-                return
         requesterTitle = await self.ask(context, "What is the title for the job?")
         if requesterTitle is None:
             return
@@ -207,7 +192,7 @@ class JobLauncher(commands.Cog, name="JobLauncher"):
             # Simulate launching the job
 
             job_response = await self.external_api_handler.launch_job(
-                api_key,
+                self.allowed_api_key,
                 requesterTitle,
                 submissionsRequired,
                 requesterDescription,
@@ -219,9 +204,7 @@ class JobLauncher(commands.Cog, name="JobLauncher"):
 
                 self.jobs_ids_queue.append(
                     {
-                        "result_channel_id": result_channel_id,
-                        "job_id": job_response,  # Store the job ID
-                        "api_key": api_key,
+                        "job_id": job_response,
                     }
                 )
                 await context.send(f"Job launched successfully: {job_response}")

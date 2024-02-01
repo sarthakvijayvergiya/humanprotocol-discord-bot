@@ -6,7 +6,6 @@ A Discord bot for launching jobs, setting API keys, and configuring result chann
 
 - `bot.py`: The main entry point for the Discord bot.
 - `cogs/`: Contains Discord bot commands organized into cog modules.
-- `database/`: Includes database-related code for storing user settings.
 - `services/`: Contains external service handlers, including the ExternalAPIHandler.
 - `.env`: Configuration file for storing sensitive information like the bot's token.
 - `config.json`: Configuration file for storing bot-related settings.
