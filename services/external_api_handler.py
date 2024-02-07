@@ -137,7 +137,7 @@ class ExternalAPIHandler:
             return None
 
     async def get_job_details(self, api_key, job_id):
-        url = f"{self.base_url}/job/detail/{job_id}"
+        url = f"{self.base_url}/job/details/{job_id}"
 
         headers = {
             "x-api-key": api_key,
