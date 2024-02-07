@@ -108,5 +108,54 @@ class ExternalAPIHandler:
             print(f"Error while making API request to check job result: {str(e)}")
             return None
 
+    async def list_pending_jobs(self, api_key, networks, status='PENDING', limit=10, skip=0):
+        url = f"{self.base_url}/job/list"
+        
+        headers = {
+            "x-api-key": api_key,
+            "Content-Type": "application/json",
+        }
+        
+        params = {
+            "networks": networks,
+            "status": status,
+            "limit": limit,
+            "skip": skip
+        }
+
+        try:
+            async with self.session.get(url, headers=headers, params=params) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return data
+                else:
+                    response_text = await response.text()
+                    print(f"Failed to list jobs: {response.status} {response_text}")
+                    return None
+        except Exception as e:
+            print(f"Error while making API request to list jobs: {str(e)}")
+            return None
+
+    async def get_job_details(self, api_key, job_id):
+        url = f"{self.base_url}/job/details/{job_id}"
+
+        headers = {
+            "x-api-key": api_key,
+            "Content-Type": "application/json",
+        }
+
+        try:
+            async with self.session.get(url, headers=headers) as response:
+                if response.status == 200:
+                    job_details = await response.json()
+                    return job_details
+                else:
+                    response_text = await response.text()
+                    print(f"Failed to get job details: {response.status} {response_text}")
+                    return None
+        except Exception as e:
+            print(f"Error while getting job details: {str(e)}")
+            return None
+        
     async def close_session(self):
         await self.session.close()

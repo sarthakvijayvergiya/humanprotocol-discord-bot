@@ -3,92 +3,137 @@ Author Sarthak Vijayvergiya - https://github.com/sarthakvijayvergiya
 Description: A Discord bot that helps in launching jobs, setting API keys, and configuring result channels for the Human Protocol.
 """
 
+from typing import List
+import discord
 from discord.ext import commands
 from discord.ext.commands import Context
 import asyncio
 from discord.ext import tasks
-from datetime import datetime, timedelta
+from datetime import datetime
 import os
 import json
 from services.external_api_handler import ExternalAPIHandler
-
+from services.sdk_service import get_escrows
+from human_protocol_sdk.escrow import EscrowData
 
 class JobLauncher(commands.Cog, name="JobLauncher"):
     def __init__(self, bot) -> None:
         self.bot = bot
         self.job_queue = []  # A list to keep track of jobs to publish results for
+        self.jobs_ids_queue = []  # A list to keep track of job IDs when it lauched
         self.external_api_handler = ExternalAPIHandler()
         self.result_check_interval = int(
             os.getenv("RESULT_CHECK_INTERVAL", 180)
-        )  # Default to 180 seconds
-
+        )
+        self.api_key = os.getenv('USER_API_KEY')
+        self.channel_id = int(os.getenv("WHITELISTED_CHANNEL_ID"))
 
     def cog_unload(self):
-        self.publish_results.cancel()  # Cancel the background task when the cog is unloaded
+        self.publish_results.cancel() 
         self.external_api_handler.close_session()
 
-    @tasks.loop(
-        seconds=60
-    )  # Temporary interval, will be reset in before_publish_results
+    @tasks.loop(seconds=60)
+    async def escrow_id_retrieval_worker(self):
+        current_time = datetime.datetime.utcnow()
+        jobs_to_remove = []
+        for job in self.jobs_ids_queue:
+            time_since_launch = (current_time - job['launch_time']).total_seconds()
+            # Check if at least 12 minutes have passed since the job was launched
+            if time_since_launch >= 720 and time_since_launch % 720 < 60:
+                job_details = await self.external_api_handler.get_job_details(self.api_key, job["job_id"])
+                if job_details and 'escrow_id' in job_details:
+                    job['escrow_id'] = job_details['escrow_id']
+                    await self.job_queue.append(job)
+                    jobs_to_remove.append(job)
+
+        # Remove the processed jobs from the jobs_ids_queue
+        for job in jobs_to_remove:
+            self.jobs_ids_queue.remove(job)
+
+    @escrow_id_retrieval_worker.before_loop
+    async def before_escrow_id_retrieval_worker(self):
+        await self.bot.wait_until_ready()
+
+    @tasks.loop(seconds=60)
     async def publish_results(self):
+        if not self.job_queue:
+            return
+        escrow_objects = await get_escrows()
+        escrow_dict_normalized = {escrow.address.lower(): escrow for escrow in escrow_objects}
+
+        completed_jobs = []
+
+        result_channel = self.bot.get_channel(int(self.channel_id))
+        if not result_channel:
+            print(f"Result channel with ID {self.result_channel} not found.")
+            return
+
         for job in self.job_queue:
-            results = await self.external_api_handler.check_job_result(
-                job["api_key"], job["job_id"]
-            )
-            if results:
-                # Assuming that the job is considered complete if any results are returned
-                result_channel = self.bot.get_channel(job["result_channel_id"])
-                if result_channel:
-                    for result in results:
-                        message = f"Job ID: {job['job_id']}, Worker Address: {result['workerAddress']}, Solution: {result['solution']}"
-                        if 'error' in result and result['error']:
-                            message += f", Error: {result['error']}"
-                        await result_channel.send(message)
-                    self.job_queue.remove(
-                        job
-                    )  # Remove job from queue after publishing results
+            escrow = escrow_dict_normalized.get(job['escrow_id'].lower())
+            if escrow and escrow.status.lower() == 'complete':
+                message = (f"Job ID: {job['job_id']} has been completed. "
+                        f"Escrow Address: {escrow.address}, "
+                        f"Total Funded Amount: {escrow.total_funded_amount}, "
+                        f"Status: {escrow.status}")
+                await result_channel.send(message)
+                completed_jobs.append(job)
+
+        # Remove completed jobs from the job queue in a more efficient way
+        self.job_queue = [job for job in self.job_queue if job not in completed_jobs]
+
+
 
     @publish_results.before_loop
     async def before_publish_results(self):
-        await self.bot.wait_until_ready()  # Wait until the bot is ready before starting the loop
+        await self.bot.wait_until_ready()
         self.publish_results.change_interval(
             seconds=self.result_check_interval
-        )  # Set the actual interval
+        )
 
-    @commands.command(name="setAPIKey")
-    async def set_api_key_command(self, context: Context):
-        api_key = await self.ask(context, "Please provide your API key secret")
-        if api_key is None:
+    async def check_whitelisted_channel(self, context: Context):
+        if isinstance(context.channel, discord.DMChannel):
+            await context.send("This command is not allowed in private messages or DMs.")
             return
+        print(f"Context Channel ID: {context.channel.id} (Type: {type(context.channel.id)})")
+        print(f"Expected Channel ID: {self.channel_id} (Type: {type(self.channel_id)})")
 
-        await self.bot.database.add_api_key(context.author.id, api_key)
+        print(context.channel.id, self.channel_id)
+        if context.channel.id != self.channel_id:
+            await context.send("This command is not allowed in this channel.")
+            return
+        return True
+    
+    @commands.command(name="listjobs")
+    @commands.has_role("Viewer")
+    async def list_jobs(self, ctx, status: str='PENDING', limit: int=10, skip: int=0):
+        if not await self.check_whitelisted_channel(ctx):
+            return
+        
+        supported_networks_str = os.getenv("SUPPORTED_NETWORKS")
+        supported_networks = json.loads(supported_networks_str.replace("'", '"'))
+        network_choice = await self.ask(
+            ctx, f"Select a network: {', '.join(supported_networks.keys())}"
+        )
+        if network_choice is None or network_choice not in supported_networks:
+            await ctx.send("Invalid network selection. Job launch cancelled.")
+            return
+        network_chain_id = supported_networks[network_choice]
+        print(network_chain_id)
 
-        await context.send("API key set successfully.")
-
-    @commands.command(name="setResultChannel")
-    async def set_result_channel_command(self, context: Context, channel_id: int):
-        await self.bot.database.add_result_channel(context.author.id, channel_id)
-        await context.send("Result channel set successfully.")
+        try:
+            pending_jobs = await self.external_api_handler.list_pending_jobs(self.api_key, [network_chain_id], status, limit, skip)
+            if pending_jobs is not None:
+                await ctx.author.send(f"Pending Jobs: {json.dumps(pending_jobs, indent=2)}")
+            else:
+                await ctx.author.send("Failed to retrieve pending jobs.")
+        except Exception as e:
+            await ctx.author.send(f"An error occurred: {str(e)}")
 
     @commands.command(name="launchJob")
+    @commands.has_role("Launcher")
     async def launch_job(self, context: Context):
-        settings = await self.bot.database.get_user_settings(context.author.id)
-
-        # Check if both API key and result channel have been set
-        if not settings or not settings[0] or not settings[1]:
-            missing_settings = []
-            if not settings or not settings[0]:
-                missing_settings.append("API key")
-            if not settings or not settings[1]:
-                missing_settings.append("result channel")
-            await context.send(
-                f"You need to set the following before launching a job: {', '.join(missing_settings)}. "
-                f"Use the commands `!setAPIKey` and `!setResultChannel <CHANNEL_ID>`."
-            )
+        if not await self.check_whitelisted_channel(context):
             return
-
-        api_key = settings[0]
-        result_channel_id = settings[1]
 
         await context.send(
             "Let's launch a new job. I will need some information from you."
@@ -138,11 +183,8 @@ class JobLauncher(commands.Cog, name="JobLauncher"):
 
         confirmation = await self.ask(context, "Is this correct? (yes/no)")
         if confirmation and confirmation.lower() == "yes":
-            # Here, you would include the code to actually launch the job with the given parameters
-            # Simulate launching the job
-
             job_response = await self.external_api_handler.launch_job(
-                api_key,
+                self.api_key,
                 requesterTitle,
                 submissionsRequired,
                 requesterDescription,
@@ -150,21 +192,29 @@ class JobLauncher(commands.Cog, name="JobLauncher"):
                 network_chain_id,
             )
             if job_response:
-                # If the job was launched successfully, do something with the response
-
-                self.job_queue.append(
+                self.jobs_ids_queue.append(
                     {
-                        "result_channel_id": result_channel_id,
-                        "job_id": job_response,  # Store the job ID
-                        "api_key": api_key,
+                        "job_id": job_response,
+                        "launch_time": datetime.datetime.utcnow(),
                     }
                 )
                 await context.send(f"Job launched successfully: {job_response}")
             else:
-                # If there was an error launching the job, inform the user
                 await context.send("There was an error launching the job.")
         else:
             await context.send("Job launch cancelled.")
+
+    @commands.command(name="getJob")
+    async def get_job(self, context: Context):
+        # Ask the user for the job ID
+        job_id = await self.ask(context, "Enter the Escrow Address:")
+        if job_id is None:
+            return
+        results = await get_escrows()
+        for result in results:
+            print(result)
+            print(result.address)
+            print(result.status)
 
     async def ask(self, context, question):
         await context.send(question)
@@ -183,5 +233,5 @@ class JobLauncher(commands.Cog, name="JobLauncher"):
 
 async def setup(bot):
     job_launcher_cog = JobLauncher(bot)
-    await bot.add_cog(job_launcher_cog)  # Use 'await' to properly await the coroutine
-    job_launcher_cog.publish_results.start()  # Start the background task when the cog is loaded
+    await bot.add_cog(job_launcher_cog)
+    job_launcher_cog.publish_results.start()
