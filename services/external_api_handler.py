@@ -137,7 +137,6 @@ class ExternalAPIHandler:
             return None
 
     async def get_job_details(self, api_key, job_id):
-        # This endpoint retrieves the detailed information of a job, including the escrow address.
         url = f"{self.base_url}/job/detail/{job_id}"
 
         headers = {
